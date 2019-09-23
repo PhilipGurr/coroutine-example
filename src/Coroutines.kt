@@ -1,11 +1,15 @@
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
+import kotlinx.coroutines.flow.collect
+import mail.Mail
+import mail.MailServer
+import mail.Mailbox
 
 val job = Job()
 val scope = CoroutineScope(Dispatchers.Default + job)
 
 fun main() {
-    
+
     /********** Async - Await **********/
     println("--- Async - Await ---")
     scope.launch {
@@ -22,7 +26,7 @@ fun main() {
 
     // Send
     scope.launch {
-        repeat(10) {
+        repeat(5) {
             channel.send(it)
             delay(100)
         }
@@ -39,25 +43,50 @@ fun main() {
     println()
 
     // Simulate Mail Server with produce
-    val mailServer: ReceiveChannel<String> = scope.produce(capacity = 8) {
-        repeat(10) { send("Mail #$it") }
-        delay(100)
+    val stringChannel = Channel<String>(0) // RendezvousChannel
+    scope.launch {
+        repeat(5) {
+            delay(100)
+            stringChannel.send("String #$it")
+        }
     }
 
     // Read mails
     scope.launch {
-        for(mail in mailServer) {
-            delay(5)
-            println("Receiver 1:  $mail")
+        for(myString in stringChannel) {
+            println("Receiver 1:  $myString")
         }
     }
     scope.launch {
-        for(mail in mailServer) {
-            delay(10)
-            println("Receiver 2:  $mail")
+        for(myString in stringChannel) {
+            println("Receiver 2:  $myString")
         }
     }
     Thread.sleep(5000)
+    println()
+
+    /********** Flow API **********/
+    println("--- Flow API ---")
+    val mailServer = MailServer()
+    val mailbox = Mailbox("test@mail.com", mailServer)
+
+    // Send mail
+    with(mailServer) {
+        send(
+            Mail("test@mail.com", "Subject 1", "Message 1")
+        )
+        send(
+            Mail("test@mail.com", "Subject 2", "Message 2")
+        )
+    }
+
+    // Show mails
+    scope.launch {
+        mailbox.mails.collect {
+            println(it)
+        }
+    }
+    Thread.sleep(1000)
 }
 
 suspend fun longRunningCalculation() = withContext(Dispatchers.Default) {
